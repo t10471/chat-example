@@ -420,7 +420,7 @@ fn process(socket: TcpStream, state: Arc<Mutex<Shared>>) {
     tokio::spawn(connection);
 }
 
-pub fn start_server(rt: &mut tokio::runtime::Runtime)  {
+pub fn start_server(rt: &mut tokio::runtime::Runtime) {
     // Create the shared state. This is how all the peers communicate.
     //
     // The server task will hold a handle to this. For every new client, the

@@ -13,13 +13,13 @@
 
 #![deny(warnings)]
 
-use std::{env, fmt, io};
 use std::net::SocketAddr;
+use std::{env, fmt, io};
 
 use tokio;
-use tokio::net::{TcpStream, TcpListener};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio_codec::{Encoder, Decoder};
+use tokio_codec::{Decoder, Encoder};
 
 use bytes::BytesMut;
 use http;
@@ -38,14 +38,13 @@ fn process(socket: TcpStream) {
         .split();
 
     // Map all requests into responses and send them back to the client.
-    let task = tx.send_all(rx.and_then(respond))
-        .then(|res| {
-            if let Err(e) = res {
-                println!("failed to process connection; error = {:?}", e);
-            }
+    let task = tx.send_all(rx.and_then(respond)).then(|res| {
+        if let Err(e) = res {
+            println!("failed to process connection; error = {:?}", e);
+        }
 
-            Ok(())
-        });
+        Ok(())
+    });
 
     // Spawn the task that handles the connection.
     tokio::spawn(task);
@@ -56,9 +55,7 @@ fn process(socket: TcpStream) {
 /// This function is a map from and HTTP request to a future of a response and
 /// represents the various handling a server might do. Currently the contents
 /// here are pretty uninteresting.
-fn respond(req: Request<()>)
-    -> Box<Future<Item = Response<String>, Error = io::Error> + Send>
-{
+fn respond(req: Request<()>) -> Box<Future<Item = Response<String>, Error = io::Error> + Send> {
     let mut ret = Response::builder();
     let body = match req.uri().path() {
         "/plaintext" => {
@@ -72,8 +69,9 @@ fn respond(req: Request<()>)
             struct Message {
                 message: &'static str,
             }
-            serde_json::to_string(&Message { message: "Hello, World!" })
-                .unwrap()
+            serde_json::to_string(&Message {
+                message: "Hello, World!",
+            }).unwrap()
         }
         _ => {
             ret.status(StatusCode::NOT_FOUND);
@@ -94,12 +92,18 @@ impl Encoder for Http {
     fn encode(&mut self, item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
 
-        write!(BytesWrite(dst), "\
-            HTTP/1.1 {}\r\n\
-            Server: Example\r\n\
-            Content-Length: {}\r\n\
-            Date: {}\r\n\
-        ", item.status(), item.body().len(), date::now()).unwrap();
+        write!(
+            BytesWrite(dst),
+            "\
+             HTTP/1.1 {}\r\n\
+             Server: Example\r\n\
+             Content-Length: {}\r\n\
+             Date: {}\r\n\
+             ",
+            item.status(),
+            item.body().len(),
+            date::now()
+        ).unwrap();
 
         for (k, v) in item.headers() {
             dst.extend_from_slice(k.as_str().as_bytes());
@@ -168,13 +172,18 @@ impl Decoder for Http {
                 headers[i] = Some((k, v));
             }
 
-            (toslice(r.method.unwrap().as_bytes()),
-             toslice(r.path.unwrap().as_bytes()),
-             r.version.unwrap(),
-             amt)
+            (
+                toslice(r.method.unwrap().as_bytes()),
+                toslice(r.path.unwrap().as_bytes()),
+                r.version.unwrap(),
+                amt,
+            )
         };
         if version != 1 {
-            return Err(io::Error::new(io::ErrorKind::Other, "only HTTP/1.1 accepted"))
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "only HTTP/1.1 accepted",
+            ));
         }
         let data = src.split_to(amt).freeze();
         let mut ret = Request::builder();
@@ -186,15 +195,13 @@ impl Decoder for Http {
                 Some((ref k, ref v)) => (k, v),
                 None => break,
             };
-            let value = unsafe {
-                HeaderValue::from_shared_unchecked(data.slice(v.0, v.1))
-            };
+            let value = unsafe { HeaderValue::from_shared_unchecked(data.slice(v.0, v.1)) };
             ret.header(&data[k.0..k.1], value);
         }
 
-        let req = ret.body(()).map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, e)
-        })?;
+        let req = ret
+            .body(())
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         Ok(Some(req))
     }
 }
@@ -282,18 +289,19 @@ mod date {
     }
 }
 
-pub fn start_server(rt: &mut tokio::runtime::Runtime)  {
+pub fn start_server(rt: &mut tokio::runtime::Runtime) {
     // Parse the arguments, bind the TCP socket we'll be listening to, spin up
     // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
     let addr = addr.parse::<SocketAddr>().unwrap();
 
     let listener = TcpListener::bind(&addr).expect("failed to bind");
-    let server = listener.incoming()
-            .map_err(|e| println!("failed to accept socket; error = {:?}", e))
-            .for_each(|socket| {
-                process(socket);
-                Ok(())
-            });
+    let server = listener
+        .incoming()
+        .map_err(|e| println!("failed to accept socket; error = {:?}", e))
+        .for_each(|socket| {
+            process(socket);
+            Ok(())
+        });
     rt.spawn(server);
 }
